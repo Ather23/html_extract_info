@@ -20,11 +20,13 @@ impl Ptags {
 }
 
 pub trait PageContextTrait {
-    fn extract_p_tags(&self, url: &str) -> Result<Option<Ptags>, Box<dyn std::error::Error>>;
+    fn extract_p_tags(&self) -> Result<Option<Ptags>, Box<dyn std::error::Error>>;
+    fn extract_image_links(&self) -> Result<Option<Vec<String>>, Box<dyn std::error::Error>>;
 }
 pub struct PageContext {
     pub url: String,
     pub doc: Option<Document>,
+    pub image_links: Option<Vec<String>>,
 }
 
 impl PageContext {
@@ -32,34 +34,64 @@ impl PageContext {
         PageContext {
             url: url.to_string(),
             doc: None,
+            image_links: None,
         }
     }
 
-    fn set_html_doc(&mut self) {
-        let doc = Document::from(self.url.as_str());
-        self.doc = Some(doc);
+    async fn set_html_doc(&mut self) {
+        let html = &self.fetch_url().await;
+        match html {
+            Ok(text) => {
+                let doc = Document::from(text.as_str());
+                self.doc = Some(doc);
+            }
+            Err(e) => {
+                eprintln!("{:?}", e);
+            }
+        }
+    }
+
+    async fn fetch_url(&mut self) -> Result<String, Box<dyn std::error::Error>> {
+        let resp = reqwest::get(&self.url).await?;
+        let body = resp.text().await?;
+        Ok(body)
     }
 }
 
 impl PageContextTrait for PageContext {
-    fn extract_p_tags(&self, html_text: &str) -> Result<Option<Ptags>, Box<dyn std::error::Error>> {
-        let doc = Document::from(html_text);
+    fn extract_p_tags(&self) -> Result<Option<Ptags>, Box<dyn std::error::Error>> {
         let mut p_tag_text: Vec<String> = Vec::new();
 
-        for node in doc.find(Name("p")) {
-            p_tag_text.push(node.text());
+        match &self.doc {
+            Some(doc) => {
+                for node in doc.find(Name("p")) {
+                    p_tag_text.push(node.text());
+                }
+            }
+            None => {
+                eprintln!("No document initialized");
+            }
         }
 
         Ok(Some(Ptags {
             text: Some(p_tag_text),
         }))
     }
-}
 
-async fn fetch_url(url: &str) -> Result<String, Box<dyn std::error::Error>> {
-    let resp = reqwest::get(url).await?;
-    let body = resp.text().await?;
-    Ok(body)
+    fn extract_image_links(&self) -> Result<Option<Vec<String>>, Box<dyn std::error::Error>> {
+        let mut image_links: Vec<String> = Vec::new();
+        match &self.doc {
+            Some(doc) => {
+                for node in doc.find(Name("img")) {
+                    image_links.push(node.attr("src").unwrap().to_string());
+                }
+            }
+            None => {
+                eprintln!("No document");
+            }
+        }
+        Ok(Some(image_links))
+    }
 }
 
 fn text_cleaner(text: &str) -> String {
@@ -73,20 +105,11 @@ fn text_cleaner(text: &str) -> String {
 
 #[tokio::main]
 async fn main() {
-    let input_url = "https://www.rust-lang.org/";
-    let text = fetch_url(input_url).await;
+    let input_url = "https://www.dawn.com/news/1741752";
     let mut page_context = PageContext::new(input_url);
-    page_context.set_html_doc();
+    page_context.set_html_doc().await;
 
-    let mut ptags = Some(Ptags::new());
-    match text {
-        Ok(x) => {
-            ptags = page_context.extract_p_tags(&x).unwrap();
-        }
-        Err(e) => {
-            println!("{:?}", e);
-        }
-    }
+    let ptags = page_context.extract_p_tags().unwrap();
 
     match ptags {
         Some(x) => {
@@ -103,7 +126,15 @@ async fn main() {
         }
     }
 
-    let text = print!("Fetching {}...", input_url);
+    let img_links = page_context.extract_image_links().unwrap();
 
-    println!("Hello, world!");
+    match img_links {
+        Some(x) => {
+            let ptags = x.iter().map(|x| text_cleaner(x)).collect::<Vec<String>>();
+            println!("{:?}", ptags);
+        }
+        None => {
+            println!("No text");
+        }
+    }
 }
