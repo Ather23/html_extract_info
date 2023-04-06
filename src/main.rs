@@ -1,8 +1,5 @@
-use std::borrow::Borrow;
-
-use async_trait::async_trait;
 use select::document::Document;
-use select::predicate::{Attr, Class, Name, Predicate};
+use select::predicate::Name;
 
 pub struct HtmlData {
     pub p_tags: Ptags,
@@ -105,7 +102,7 @@ fn text_cleaner(text: &str) -> String {
 
 #[tokio::main]
 async fn main() {
-    let input_url = "https://www.dawn.com/news/1741752";
+    let input_url = "https://en.wikipedia.org/wiki/Cosine_similarity";
     let mut page_context = PageContext::new(input_url);
     page_context.set_html_doc().await;
 
@@ -126,15 +123,15 @@ async fn main() {
         }
     }
 
-    let img_links = page_context.extract_image_links().unwrap();
+    // let img_links = page_context.extract_image_links().unwrap();
 
-    match img_links {
-        Some(x) => {
-            let ptags = x.iter().map(|x| text_cleaner(x)).collect::<Vec<String>>();
-            println!("{:?}", ptags);
-        }
-        None => {
-            println!("No text");
-        }
-    }
+    // match img_links {
+    //     Some(x) => {
+    //         let ptags = x.iter().map(|x| text_cleaner(x)).collect::<Vec<String>>();
+    //         println!("{:?}", ptags);
+    //     }
+    //     None => {
+    //         println!("No text");
+    //     }
+    // }
 }
